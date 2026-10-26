@@ -1,0 +1,592 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>I/O Data Transfer Simulation</title>
+
+<style>
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #eef2f7;
+  color: #172033;
+}
+
+header {
+  background: #17365d;
+  color: white;
+  text-align: center;
+  padding: 22px 12px;
+}
+
+header h1 { margin: 0 0 8px; }
+header p { margin: 0; }
+
+.container {
+  max-width: 1050px;
+  margin: 22px auto;
+  padding: 0 15px;
+}
+
+.panel {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 18px;
+  box-shadow: 0 3px 12px #00000010;
+}
+
+h2 { color: #17365d; margin-top: 0; }
+
+select, button {
+  padding: 11px 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  font-size: 15px;
+  margin: 5px;
+}
+
+button {
+  border: none;
+  background: #1769aa;
+  color: white;
+  cursor: pointer;
+}
+
+button:hover { background: #104d80; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+
+.diagram {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  align-items: stretch;
+  text-align: center;
+}
+
+.device {
+  border: 2px solid #9bb5d1;
+  border-radius: 10px;
+  padding: 17px 8px;
+  background: #f5f9ff;
+}
+
+.device .symbol {
+  font-size: 35px;
+  margin-bottom: 10px;
+}
+
+.device p { font-size: 13px; }
+
+.arrow {
+  color: #1769aa;
+  font-weight: bold;
+  margin: 10px 0;
+}
+
+.status {
+  background: #e9f5ff;
+  border-radius: 8px;
+  padding: 13px;
+  margin-top: 15px;
+  min-height: 46px;
+}
+
+.progress-bg {
+  background: #dbe3ed;
+  height: 18px;
+  border-radius: 20px;
+  overflow: hidden;
+  margin: 12px 0;
+}
+
+.progress {
+  width: 0;
+  height: 100%;
+  background: #16a085;
+  transition: width .2s;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.stat {
+  background: #f1f5f9;
+  padding: 12px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.stat strong {
+  display: block;
+  color: #1769aa;
+  font-size: 23px;
+  margin-top: 5px;
+}
+
+.blocks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.block {
+  border: 1px solid #b7c6d8;
+  padding: 10px;
+  border-radius: 6px;
+  background: #edf2f7;
+  font-size: 13px;
+}
+
+.block.done {
+  background: #c9f7df;
+  border-color: #16a085;
+}
+
+.block.active {
+  background: #fff0bd;
+  border-color: #e5a000;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th, td {
+  border: 1px solid #d5deea;
+  text-align: left;
+  padding: 10px;
+}
+
+th { background: #eaf1f9; }
+
+#log {
+  max-height: 220px;
+  overflow-y: auto;
+  padding-left: 22px;
+}
+
+#log li { margin-bottom: 8px; }
+
+@media (max-width: 600px) {
+  .diagram { grid-template-columns: 1fr; }
+  .stats { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  <h1>I/O Data Transfer Simulation</h1>
+  <p>Programmed I/O | Interrupt-Driven I/O | DMA</p>
+</header>
+
+<div class="container">
+
+  <section class="panel">
+    <h2>1. Select Transfer Method</h2>
+
+    <label for="method"><strong>I/O Method:</strong></label>
+    <select id="method">
+      <option value="pio">Programmed I/O (Polling)</option>
+      <option value="interrupt">Interrupt-Driven I/O</option>
+      <option value="dma">Direct Memory Access (DMA)</option>
+    </select>
+
+    <label for="total"><strong>Data Blocks:</strong></label>
+    <select id="total">
+      <option value="5">5 blocks</option>
+      <option value="10" selected>10 blocks</option>
+      <option value="20">20 blocks</option>
+    </select>
+
+    <div>
+      <button id="start">▶ Start Transfer</button>
+      <button id="pause" disabled>⏸ Pause</button>
+      <button id="reset">↻ Reset</button>
+    </div>
+
+    <div class="status" id="description">
+      The CPU checks the device repeatedly and transfers each data block.
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>2. System Architecture</h2>
+
+    <div class="diagram">
+      <div class="device" id="cpu">
+        <div class="symbol">🖥️</div>
+        <strong>CPU</strong>
+        <p id="cpuStatus">Idle</p>
+      </div>
+
+      <div class="device" id="controller">
+        <div class="symbol">🔌</div>
+        <strong id="middleTitle">I/O Controller</strong>
+        <p id="middleStatus">Waiting</p>
+      </div>
+
+      <div class="device" id="memory">
+        <div class="symbol">💾</div>
+        <strong>Main Memory</strong>
+        <p id="memoryStatus">0 blocks received</p>
+      </div>
+    </div>
+
+    <div class="arrow" id="flow">
+      I/O Device → CPU → Main Memory
+    </div>
+
+    <div class="progress-bg">
+      <div class="progress" id="progress"></div>
+    </div>
+
+    <strong id="progressText">Transfer Progress: 0%</strong>
+
+    <div class="stats">
+      <div class="stat">
+        Data Transferred
+        <strong id="transferred">0 / 10</strong>
+      </div>
+      <div class="stat">
+        CPU Busy Steps
+        <strong id="busy">0</strong>
+      </div>
+      <div class="stat">
+        CPU Available Steps
+        <strong id="free">0</strong>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>3. Data Block Visualization</h2>
+    <p>Yellow = current block, green = transferred, grey = pending.</p>
+    <div class="blocks" id="blocks"></div>
+  </section>
+
+  <section class="panel">
+    <h2>4. Execution Log</h2>
+    <ol id="log"></ol>
+  </section>
+
+  <section class="panel">
+    <h2>5. Method Comparison</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Feature</th>
+          <th>Programmed I/O</th>
+          <th>Interrupt I/O</th>
+          <th>DMA</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>CPU involvement</td>
+          <td>High</td>
+          <td>Moderate</td>
+          <td>Low during transfer</td>
+        </tr>
+        <tr>
+          <td>Device checking</td>
+          <td>Continuous polling</td>
+          <td>Interrupt notification</td>
+          <td>DMA controller</td>
+        </tr>
+        <tr>
+          <td>Data movement</td>
+          <td>CPU moves data</td>
+          <td>CPU moves data</td>
+          <td>DMA moves data</td>
+        </tr>
+        <tr>
+          <td>CPU can do other work</td>
+          <td>Limited</td>
+          <td>Yes, while waiting</td>
+          <td>Yes, during transfer</td>
+        </tr>
+        <tr>
+          <td>Best suited for</td>
+          <td>Simple devices</td>
+          <td>Occasional events</td>
+          <td>Large data blocks</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+</div>
+
+<script>
+const method = document.getElementById("method");
+const total = document.getElementById("total");
+const startBtn = document.getElementById("start");
+const pauseBtn = document.getElementById("pause");
+const resetBtn = document.getElementById("reset");
+
+const description = document.getElementById("description");
+const cpuStatus = document.getElementById("cpuStatus");
+const middleTitle = document.getElementById("middleTitle");
+const middleStatus = document.getElementById("middleStatus");
+const memoryStatus = document.getElementById("memoryStatus");
+const flow = document.getElementById("flow");
+const progress = document.getElementById("progress");
+const progressText = document.getElementById("progressText");
+const transferred = document.getElementById("transferred");
+const busy = document.getElementById("busy");
+const free = document.getElementById("free");
+const blocks = document.getElementById("blocks");
+const log = document.getElementById("log");
+
+let count = 10;
+let current = 0;
+let busySteps = 0;
+let freeSteps = 0;
+let timer = null;
+let running = false;
+let paused = false;
+let phase = 0;
+let dmaRemaining = 0;
+
+const descriptions = {
+  pio: "Programmed I/O: The CPU repeatedly polls the device and copies data into memory.",
+  interrupt: "Interrupt-driven I/O: The CPU does other work while waiting for a device interrupt, then copies the data.",
+  dma: "DMA: The CPU initializes the DMA controller. DMA transfers blocks to memory while the CPU does other work."
+};
+
+function addLog(message) {
+  const item = document.createElement("li");
+  item.textContent = message;
+  log.prepend(item);
+}
+
+function drawBlocks() {
+  blocks.replaceChildren();
+
+  for (let i = 0; i < count; i++) {
+    const b = document.createElement("div");
+    b.className = "block";
+    if (i < current) b.classList.add("done");
+    else if (i === current && running) b.classList.add("active");
+
+    b.textContent = "Block " + (i + 1);
+    blocks.appendChild(b);
+  }
+}
+
+function render() {
+  const pct = Math.round((current / count) * 100);
+
+  progress.style.width = pct + "%";
+  progressText.textContent = "Transfer Progress: " + pct + "%";
+  transferred.textContent = current + " / " + count;
+  busy.textContent = busySteps;
+  free.textContent = freeSteps;
+  memoryStatus.textContent = current + " block(s) received";
+
+  drawBlocks();
+}
+
+function configure() {
+  const m = method.value;
+
+  description.textContent = descriptions[m];
+
+  middleTitle.textContent =
+    m === "dma" ? "DMA Controller" : "I/O Controller";
+
+  flow.textContent =
+    m === "dma"
+      ? "I/O Device → DMA Controller → Main Memory"
+      : "I/O Device → CPU → Main Memory";
+
+  cpuStatus.textContent = "Idle";
+  middleStatus.textContent = "Waiting";
+}
+
+function finish() {
+  clearInterval(timer);
+  timer = null;
+  running = false;
+  paused = false;
+
+  startBtn.disabled = false;
+  pauseBtn.disabled = true;
+
+  cpuStatus.textContent = "Idle";
+  middleStatus.textContent = "Transfer complete";
+
+  addLog("Transfer completed: " + count + " data blocks.");
+  render();
+}
+
+function step() {
+  if (!running) return;
+
+  const m = method.value;
+
+  if (current >= count) {
+    finish();
+    return;
+  }
+
+  if (m === "pio") {
+    // Every polling cycle occupies the CPU.
+    busySteps++;
+    cpuStatus.textContent = "Polling device";
+
+    if (phase === 0) {
+      middleStatus.textContent = "Device ready check";
+      addLog("CPU polls the I/O device.");
+      phase = 1;
+    } else {
+      middleStatus.textContent = "Sending block " + (current + 1);
+      current++;
+      phase = 0;
+      addLog("CPU copies a data block to main memory.");
+    }
+
+  } else if (m === "interrupt") {
+    if (phase === 0) {
+      // CPU does other work while the device prepares data.
+      freeSteps++;
+      cpuStatus.textContent = "Executing other work";
+      middleStatus.textContent = "Device preparing data";
+
+      addLog("CPU continues other work while the device operates.");
+      phase = 1;
+
+    } else if (phase === 1) {
+      busySteps++;
+      cpuStatus.textContent = "Handling interrupt";
+      middleStatus.textContent = "Interrupt requested";
+
+      addLog("Device raises an interrupt; CPU starts its handler.");
+      phase = 2;
+
+    } else {
+      busySteps++;
+      cpuStatus.textContent = "Copying data";
+      current++;
+
+      middleStatus.textContent = "Next block";
+      addLog("Interrupt handler copies a block to memory.");
+      phase = 0;
+    }
+
+  } else {
+    // DMA setup is a CPU operation performed once.
+    if (phase === 0) {
+      busySteps++;
+      cpuStatus.textContent = "Configuring DMA";
+      middleStatus.textContent = "DMA initialized";
+
+      dmaRemaining = count;
+      addLog("CPU configures DMA address, size and transfer direction.");
+      phase = 1;
+
+    } else if (dmaRemaining > 0) {
+      // DMA moves data independently of the CPU.
+      freeSteps++;
+      cpuStatus.textContent = "Executing other work";
+      middleStatus.textContent = "DMA transferring";
+
+      current++;
+      dmaRemaining--;
+
+      addLog("DMA transfers block " + current + " directly to memory.");
+
+      if (dmaRemaining === 0) {
+        addLog("DMA signals transfer completion to the CPU.");
+        cpuStatus.textContent = "Handling completion";
+        middleStatus.textContent = "Transfer complete";
+      }
+    }
+  }
+
+  render();
+
+  if (current >= count) {
+    finish();
+  }
+}
+
+function reset() {
+  clearInterval(timer);
+  timer = null;
+
+  count = Number(total.value);
+  current = 0;
+  busySteps = 0;
+  freeSteps = 0;
+  phase = 0;
+  dmaRemaining = 0;
+  running = false;
+  paused = false;
+
+  startBtn.disabled = false;
+  pauseBtn.disabled = true;
+
+  log.replaceChildren();
+  configure();
+  render();
+
+  addLog("Simulation initialized for " + count + " blocks.");
+}
+
+startBtn.addEventListener("click", () => {
+  if (running) return;
+
+  if (current >= count) reset();
+
+  running = true;
+  paused = false;
+
+  startBtn.disabled = true;
+  pauseBtn.disabled = false;
+
+  addLog("Started " + method.options[method.selectedIndex].text + ".");
+
+  timer = setInterval(step, 650);
+  step();
+});
+
+pauseBtn.addEventListener("click", () => {
+  if (!running) return;
+
+  clearInterval(timer);
+  timer = null;
+  running = false;
+  paused = true;
+
+  startBtn.disabled = false;
+  pauseBtn.disabled = true;
+  cpuStatus.textContent = "Paused";
+
+  addLog("Simulation paused.");
+  render();
+});
+
+resetBtn.addEventListener("click", reset);
+
+method.addEventListener("change", reset);
+total.addEventListener("change", reset);
+
+reset();
+</script>
+
+</body>
+</html>
